@@ -191,19 +191,17 @@ public class Fernet {
 			return true;
 		}
 
-		public String sign(byte[] ciphertext) throws Exception {
+		public byte[] sign(byte[] ciphertext) throws Exception {
 			this.ciphertext = ciphertext;
 
 			byte[] payload = getPayload();
 
 			this.signature = generateHash(payload);
 
-			return base64UrlEncode(
-					Bytes.concat(
-							payload,
-							// This field is the 256-bit SHA256 HMAC, under signing-key.
-							signature
-							)
+			return Bytes.concat(
+					payload,
+					// This field is the 256-bit SHA256 HMAC, under signing-key.
+					signature
 					);
 		}
 
@@ -308,6 +306,21 @@ public class Fernet {
 	 * @throws Exception
 	 */
 	public final String encrypt(final byte[] data) throws Exception {
+		return base64UrlEncode(encryptRaw(data));
+	}
+	/**
+	 * The encrypted message contains the current time when it was
+	 * generated in plaintext, the time a message was created will
+	 * therefore be visible to a possible attacker.
+	 *
+	 * @param data
+	 * The message you would like to encrypt.
+	 * @return
+	 * A secure message that cannot be read or altered without the key.
+	 * This is referred to as a “Fernet token”.
+	 * @throws Exception
+	 */
+	public final byte[] encryptRaw(final byte[] data) throws Exception {
 		final Token token = new Token();
 
 		try {
@@ -370,6 +383,12 @@ public class Fernet {
 	 */
 	public final byte[] decrypt(final String token) throws Exception {
 		return decrypt(token, 0);
+	}
+	public final byte[] decryptRaw(final byte[] data, final int ttl) throws Exception {
+		return decrypt(base64UrlEncode(data), ttl);
+	}
+	public final byte[] decryptRaw(final byte[] token) throws Exception {
+		return decryptRaw(token, 0);
 	}
 
 	private static long getTime() {
