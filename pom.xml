@@ -33,7 +33,7 @@
     <dependency>
     	<groupId>com.google.guava</groupId>
     	<artifactId>guava</artifactId>
-    	<version>21.0</version>
+    	<version>20.0</version>
     </dependency>
   </dependencies>
   <description>Fernet guarantees that a message encrypted using it cannot be manipulated or read without the key. Fernet is an implementation of symmetric (also known as “secret key”) authenticated cryptography.</description>
