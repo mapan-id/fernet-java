@@ -5,13 +5,14 @@ import java.nio.ByteOrder;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Arrays;
-import java.util.Base64;
 
 import javax.crypto.Cipher;
 import javax.crypto.Mac;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import javax.xml.bind.DatatypeConverter;
+
+import org.apache.commons.codec.binary.Base64;
 
 import com.google.common.primitives.Bytes;
 import com.google.common.primitives.Longs;
@@ -396,10 +397,12 @@ public class Fernet {
 	}
 
 	public static String base64UrlEncode(byte[] input) {
-		return Base64.getUrlEncoder()/*.withoutPadding()*/.encodeToString(input);
+		return Base64.encodeBase64URLSafeString(input);
+		// return Base64.getUrlEncoder()/*.withoutPadding()*/.encodeToString(input);	// Java 8
 	}
 	public static byte[] base64UrlDecode(String input) {
-		return Base64.getUrlDecoder().decode(input);
+		return Base64.decodeBase64(input);
+		// return Base64.getUrlDecoder().decode(input);	// Java 8
 	}
 
 	public static void main( String[] args ) throws Exception
