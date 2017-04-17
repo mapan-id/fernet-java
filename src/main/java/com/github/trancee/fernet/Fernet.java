@@ -144,11 +144,8 @@ public class Fernet {
 			timestamp = getTime();
 			iv = generateKey();
 		}
-		public Token(String token) {
-			// 1. base64url decode the token.
-			byte[] payload = base64UrlDecode(token);
-
-			ByteBuffer buffer = ByteBuffer.wrap(payload);
+		public Token(byte[] token) {
+			ByteBuffer buffer = ByteBuffer.wrap(token);
 			buffer.order(ByteOrder.BIG_ENDIAN);
 
 			if (buffer != null && buffer.capacity() >= MIN_TOKEN_SIZE) {
@@ -162,6 +159,10 @@ public class Fernet {
 
 				buffer.get(signature);
 			}
+		}
+		public Token(String token) {
+			// 1. base64url decode the token.
+			this(base64UrlDecode(token));
 		}
 
 		public Boolean verify(int ttl) throws Exception {
@@ -181,11 +182,11 @@ public class Fernet {
 			}
 
 			// 4. Recompute the HMAC from the other fields and the user-supplied signing-key.
-			byte[] payload = getPayload();
+			byte[] token = buildToken();
 
 			// 5. Ensure the recomputed HMAC matches the HMAC field stored in the token,
 			//    using a constant-time comparison function.
-			if (! Arrays.equals(signature, generateHash(payload))) {
+			if (! Arrays.equals(signature, generateHash(token))) {
 				throw new Exception("Invalid signature.");
 			}
 
@@ -195,18 +196,18 @@ public class Fernet {
 		public byte[] sign(byte[] ciphertext) throws Exception {
 			this.ciphertext = ciphertext;
 
-			byte[] payload = getPayload();
+			byte[] token = buildToken();
 
-			this.signature = generateHash(payload);
+			this.signature = generateHash(token);
 
 			return Bytes.concat(
-					payload,
+					token,
 					// This field is the 256-bit SHA256 HMAC, under signing-key.
 					signature
 					);
 		}
 
-		private final byte[] getPayload() {
+		private final byte[] buildToken() {
 			return Bytes.concat(
 					// This field denotes which version of the format is being used by the token.
 					byteToByteArray(this.version),
@@ -353,9 +354,7 @@ public class Fernet {
 	 * The original plaintext.
 	 * @throws Exception
 	 */
-	public final byte[] decrypt(final String data, final int ttl) throws Exception {
-		final Token token = new Token(data);
-
+	public final byte[] decrypt(final Token token, final int ttl) throws Exception {
 		try {
 			token.verify(ttl);
 
@@ -374,6 +373,14 @@ public class Fernet {
 			throw e;
 		}
 	}
+	public final byte[] decrypt(final String data, final int ttl) throws Exception {
+		final Token token = new Token(data);
+		return decrypt(token, ttl);
+	}
+	public final byte[] decrypt(final byte[] data, final int ttl) throws Exception {
+		final Token token = new Token(data);
+		return decrypt(token, ttl);
+	}
 	/**
 	 *
 	 * @param token
@@ -386,10 +393,10 @@ public class Fernet {
 		return decrypt(token, 0);
 	}
 	public final byte[] decryptRaw(final byte[] data, final int ttl) throws Exception {
-		return decrypt(base64UrlEncode(data), ttl);
+		return decrypt(data, ttl);
 	}
-	public final byte[] decryptRaw(final byte[] token) throws Exception {
-		return decryptRaw(token, 0);
+	public final byte[] decryptRaw(final byte[] data) throws Exception {
+		return decryptRaw(data, 0);
 	}
 
 	private static long getTime() {
