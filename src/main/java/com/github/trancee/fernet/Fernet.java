@@ -2,6 +2,7 @@ package com.github.trancee.fernet;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Arrays;
@@ -32,6 +33,7 @@ import com.google.common.primitives.Longs;
  *
  * @author Philipp Grosswiler <philipp.grosswiler@gmail.com>
  */
+@SuppressWarnings("restriction")
 public class Fernet {
 	public static final byte VERSION = (byte) 0x80;	// 8 bits
 
@@ -58,15 +60,15 @@ public class Fernet {
 			this.signingKey = generateKey();
 			this.encryptionKey = generateKey();
 		}
-		public Key(String key) throws Exception {
+		public Key(String key) throws FernetException {
 			this(base64UrlDecode(key));
 		}
-		public Key(byte[] key) throws Exception {
+		public Key(byte[] key) throws FernetException {
 			if (key != null && key.length == 32) {
 				this.signingKey = Arrays.copyOf(key, 16);
 				this.encryptionKey = Arrays.copyOfRange(key, 16, 32);
 			} else {
-				throw new Exception("Incorrect key.");
+				throw new FernetException("Incorrect key.");
 			}
 		}
 
@@ -165,10 +167,10 @@ public class Fernet {
 			this(base64UrlDecode(token));
 		}
 
-		public Boolean verify(int ttl) throws Exception {
+		public Boolean verify(int ttl) throws FernetException {
 			// 2. Ensure the first byte of the token is 0x80.
 			if (version != Fernet.VERSION) {
-				throw new Exception("Invalid version.");
+				throw new FernetException("Invalid version.");
 			}
 
 			// 3. If the user has specified a maximum age (or "time-to-live") for the token,
@@ -177,7 +179,7 @@ public class Fernet {
 				long currentTime = getTime();
 
 				if (timestamp + ttl < currentTime || currentTime + MAX_CLOCK_SKEW < timestamp) {
-					throw new Exception("Token has expired.");
+					throw new TokenExpiredException("Token has expired.");
 				}
 			}
 
@@ -186,14 +188,18 @@ public class Fernet {
 
 			// 5. Ensure the recomputed HMAC matches the HMAC field stored in the token,
 			//    using a constant-time comparison function.
-			if (! Arrays.equals(signature, generateHash(token))) {
-				throw new Exception("Invalid signature.");
+			try {
+				if (! Arrays.equals(signature, generateHash(token))) {
+					throw new FernetException("Invalid signature.");
+				}
+			} catch (Exception e) {
+				throw new FernetException(e);
 			}
 
 			return true;
 		}
 
-		public byte[] sign(byte[] ciphertext) throws Exception {
+		public byte[] sign(byte[] ciphertext) throws InvalidKeyException, NoSuchAlgorithmException {
 			this.ciphertext = ciphertext;
 
 			byte[] token = buildToken();
@@ -240,12 +246,12 @@ public class Fernet {
 	 * Anyone with this key is able to create and read messages.
 	 *
 	 * @param key
-	 * @throws Exception
+	 * @throws FernetException
 	 */
-	public Fernet(String key) throws Exception {
+	public Fernet(String key) throws FernetException {
 		this.key = new Key(key);
 	}
-	public Fernet(byte[] key) throws Exception {
+	public Fernet(byte[] key) throws FernetException {
 		this.key = new Key(key);
 	}
 	public Fernet(Key key) {
@@ -256,17 +262,13 @@ public class Fernet {
 		return DatatypeConverter.printHexBinary(data).toLowerCase();
 	}
 
-	private final byte[] generateHash(byte[] data) throws Exception {
+	private final byte[] generateHash(byte[] data) throws NoSuchAlgorithmException, InvalidKeyException {
 		Mac mac;
 
-		try {
-			SecretKeySpec keySpec = new SecretKeySpec(this.key.signingKey, "HmacSHA256");
+		SecretKeySpec keySpec = new SecretKeySpec(this.key.signingKey, "HmacSHA256");
 
-			mac = Mac.getInstance("HmacSHA256");
-			mac.init(keySpec);
-		} catch (NoSuchAlgorithmException e) {
-			throw new Exception("NoSuchAlgorithmException.");
-		}
+		mac = Mac.getInstance("HmacSHA256");
+		mac.init(keySpec);
 
 		return mac.doFinal(data);
 	}
@@ -305,9 +307,9 @@ public class Fernet {
 	 * @return
 	 * A secure message that cannot be read or altered without the key.
 	 * It is URL-safe base64-encoded. This is referred to as a “Fernet token”.
-	 * @throws Exception
+	 * @throws FernetException
 	 */
-	public final String encrypt(final byte[] data) throws Exception {
+	public final String encrypt(final byte[] data) throws FernetException {
 		return base64UrlEncode(encryptRaw(data));
 	}
 	/**
@@ -320,15 +322,15 @@ public class Fernet {
 	 * @return
 	 * A secure message that cannot be read or altered without the key.
 	 * This is referred to as a “Fernet token”.
-	 * @throws Exception
+	 * @throws FernetException
 	 */
-	public final byte[] encryptRaw(final byte[] data) throws Exception {
+	public final byte[] encryptRaw(final byte[] data) throws FernetException {
 		final Token token = new Token();
 
-		try {
-			IvParameterSpec ivSpec = new IvParameterSpec(token.iv);
-			SecretKeySpec keySpec = new SecretKeySpec(key.encryptionKey, "AES");
+		IvParameterSpec ivSpec = new IvParameterSpec(token.iv);
+		SecretKeySpec keySpec = new SecretKeySpec(key.encryptionKey, "AES");
 
+		try {
 			// In Java, the standard padding name is PKCS5Padding, not PKCS7Padding.
 			// Java is actually performing PKCS #7 padding, but in the JCA specification,
 			// PKCS5Padding is the name given.
@@ -339,7 +341,7 @@ public class Fernet {
 
 			return token.sign(ciphertext);
 		} catch (Exception e) {
-			throw e;
+			throw new FernetException(e);
 		}
 	}
 	/**
@@ -352,12 +354,12 @@ public class Fernet {
 	 * the message is not considered.
 	 * @return
 	 * The original plaintext.
-	 * @throws Exception
+	 * @throws FernetException
 	 */
-	public final byte[] decrypt(final Token token, final int ttl) throws Exception {
-		try {
-			token.verify(ttl);
+	public final byte[] decrypt(final Token token, final int ttl) throws FernetException {
+		token.verify(ttl);
 
+		try {
 			// 6. Decrypt the ciphertext field using AES 128 in CBC mode with the recorded IV and user-supplied encryption-key.
 			IvParameterSpec ivSpec = new IvParameterSpec(token.iv);
 			SecretKeySpec keySpec = new SecretKeySpec(key.encryptionKey, "AES");
@@ -370,14 +372,14 @@ public class Fernet {
 
 			return cipher.doFinal(token.ciphertext);
 		} catch (Exception e) {
-			throw e;
+			throw new FernetException(e);
 		}
 	}
-	public final byte[] decrypt(final String data, final int ttl) throws Exception {
+	public final byte[] decrypt(final String data, final int ttl) throws FernetException {
 		final Token token = new Token(data);
 		return decrypt(token, ttl);
 	}
-	public final byte[] decrypt(final byte[] data, final int ttl) throws Exception {
+	public final byte[] decrypt(final byte[] data, final int ttl) throws FernetException {
 		final Token token = new Token(data);
 		return decrypt(token, ttl);
 	}
@@ -387,15 +389,15 @@ public class Fernet {
 	 * The Fernet token. This is the result of calling encrypt().
 	 * @return
 	 * The original plaintext.
-	 * @throws Exception
+	 * @throws FernetException
 	 */
-	public final byte[] decrypt(final String token) throws Exception {
+	public final byte[] decrypt(final String token) throws FernetException {
 		return decrypt(token, 0);
 	}
-	public final byte[] decryptRaw(final byte[] data, final int ttl) throws Exception {
+	public final byte[] decryptRaw(final byte[] data, final int ttl) throws FernetException {
 		return decrypt(data, ttl);
 	}
-	public final byte[] decryptRaw(final byte[] data) throws Exception {
+	public final byte[] decryptRaw(final byte[] data) throws FernetException {
 		return decryptRaw(data, 0);
 	}
 
@@ -412,15 +414,21 @@ public class Fernet {
 		// return Base64.getUrlDecoder().decode(input);	// Java 8
 	}
 
-	public static void main( String[] args ) throws Exception
+	public static void main( String[] args )
 	{
 		Fernet fernet = new Fernet();
 		System.out.println("Key = " + fernet.key);
 
-		String token = fernet.encrypt("The quick brown fox jumps over the lazy dog.".getBytes());
-		System.out.println("Token = " + token);
+		try {
+			String token = fernet.encrypt("The quick brown fox jumps over the lazy dog.".getBytes());
 
-		byte[] message = fernet.decrypt(token);
-		System.out.println("Message = " + new String(message));
+			System.out.println("Token = " + token);
+
+			byte[] message = fernet.decrypt(token);
+			System.out.println("Message = " + new String(message));
+		} catch (FernetException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 }
