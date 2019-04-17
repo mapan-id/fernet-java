@@ -1,1 +1,4 @@
-/home/phil/workspace/fernet/src/main/java/com/github/trancee/fernet/Fernet.java
+/home/phil/Projects/fernet-java/src/main/java/com/github/trancee/fernet/FernetException.java
+/home/phil/Projects/fernet-java/src/main/java/com/github/trancee/fernet/TokenExpiredException.java
+/home/phil/Projects/fernet-java/src/main/java/com/github/trancee/fernet/Base64.java
+/home/phil/Projects/fernet-java/src/main/java/com/github/trancee/fernet/Fernet.java

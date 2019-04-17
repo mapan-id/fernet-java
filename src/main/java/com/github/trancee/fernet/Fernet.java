@@ -12,9 +12,6 @@ import javax.crypto.Mac;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
-import com.google.common.primitives.Bytes;
-import com.google.common.primitives.Longs;
-
 /**
  * Fernet (symmetric encryption)
  *
@@ -39,6 +36,31 @@ public class Fernet {
 	private static final int HMAC_SIZE = (256) >> 3;
 
 	private static final int MAX_CLOCK_SKEW = 60;
+
+	private static class Bytes {
+		/**
+		 * Returns the values from each provided array combined into a single array. For
+		 * example, {@code concat(new byte[] {a, b}, new byte[] {}, new byte[] {c}}
+		 * returns the array {@code {a, b, c}}.
+		 *
+		 * @param arrays zero or more {@code byte} arrays
+		 * @return a single array containing all the values from the source arrays, in
+		 *         order
+		 */
+		static byte[] concat(byte[]... arrays) {
+			int length = 0;
+			for (byte[] array : arrays) {
+				length += array.length;
+			}
+			byte[] result = new byte[length];
+			int pos = 0;
+			for (byte[] array : arrays) {
+				System.arraycopy(array, 0, result, pos, array.length);
+				pos += array.length;
+			}
+			return result;
+		}
+	}
 
 	/**
 	 * Key Format
@@ -221,7 +243,7 @@ public class Fernet {
 					// This field denotes which version of the format is being used by the token.
 					byteToByteArray(this.version),
 					// This field is a 64-bit unsigned big-endian integer.
-					Longs.toByteArray(this.timestamp),
+					longToByteArray(this.timestamp),
 					// The 128-bit Initialization Vector used in AES encryption and decryption of
 					// the Ciphertext.
 					this.iv,
@@ -230,7 +252,8 @@ public class Fernet {
 					this.ciphertext);
 		}
 
-		private final byte[] generateHash(byte[] data, byte[] signingKey) throws NoSuchAlgorithmException, InvalidKeyException {
+		private final byte[] generateHash(byte[] data, byte[] signingKey)
+				throws NoSuchAlgorithmException, InvalidKeyException {
 			Mac mac;
 
 			SecretKeySpec keySpec = new SecretKeySpec(signingKey, "HmacSHA256");
@@ -241,12 +264,32 @@ public class Fernet {
 			return mac.doFinal(data);
 		}
 
-		private final byte[] byteToByteArray(byte input) {
-			byte[] output = new byte[1];
+		private final byte[] byteToByteArray(byte value) {
+			return new byte[] { value };
+		}
 
-			output[0] = input;
-
-			return output;
+		/**
+		 * Returns a big-endian representation of {@code value} in an 8-element byte
+		 * array; equivalent to {@code ByteBuffer.allocate(8).putLong(value).array()}.
+		 * For example, the input value {@code
+		 * 0x1213141516171819L} would yield the byte array {@code {0x12, 0x13, 0x14,
+		 * 0x15, 0x16, 0x17, 0x18, 0x19}}.
+		 *
+		 * <p>
+		 * If you need to convert and concatenate several values (possibly even of
+		 * different types), use a shared {@link java.nio.ByteBuffer} instance, or use
+		 * {@link com.google.common.io.ByteStreams#newDataOutput()} to get a growable
+		 * buffer.
+		 */
+		private final byte[] longToByteArray(long value) {
+			// Note that this code needs to stay compatible with GWT, which has known
+			// bugs when narrowing byte casts of long values occur.
+			byte[] result = new byte[8];
+			for (int i = 7; i >= 0; i--) {
+				result[i] = (byte) (value & 0xffL);
+				value >>= 8;
+			}
+			return result;
 		}
 	}
 

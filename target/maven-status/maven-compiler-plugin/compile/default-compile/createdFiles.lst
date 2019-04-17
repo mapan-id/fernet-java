@@ -1,3 +1,8 @@
 com/github/trancee/fernet/Fernet.class
+com/github/trancee/fernet/Base64$Options.class
 com/github/trancee/fernet/Fernet$Key.class
+com/github/trancee/fernet/TokenExpiredException.class
+com/github/trancee/fernet/Fernet$Bytes.class
 com/github/trancee/fernet/Fernet$Token.class
+com/github/trancee/fernet/FernetException.class
+com/github/trancee/fernet/Base64.class
